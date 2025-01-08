@@ -15,15 +15,6 @@ db_path = "db_dkp.db"
 connection = sqlite3.connect(db_path)
 cursor = connection.cursor()
 
-event_dkp_values = {
-    "Archboss": 5,
-    "Boonstone Fight": 2,
-    "Riftstone Fight": 2,
-    "Tax Delivery (Attack)": 2,
-    "Tax Delivery (Defense)": 4,
-    "Siege": 7,
-    "Inter-server Battle": 4
-}
 # Function to refresh the display window
 def refresh_display():
     for row in tree.get_children():
@@ -37,34 +28,75 @@ def refresh_display():
 def edit_note(event):
     selected_item = tree.selection()
     if not selected_item:
-        messagebox.showwarning("Selection Error", "Please select a player to edit the note.")
+        messagebox.showwarning("Selection Error", "Please select a player to edit.")
         return
 
     player_id, name, dkp_base, dkp_gain, dkp_spent, manual_modifire, note, decay_value = tree.item(selected_item[0])['values']
 
-    # Create a new window for editing the note
+    # Create a new window for editing
     note_window = tk.Toplevel(root)
-    note_window.title(f"Edit Note for {name}")
-    note_window.geometry("550x550")
+    note_window.title(f"Edit Player Data for {name}")
+    note_window.geometry("550x600")
 
+    # Editable fields for DKP Base, Gain, and Spent
     tk.Label(note_window, text=f"Name: {name}").pack(pady=5)
-    tk.Label(note_window, text=f"DKP Base: {dkp_base}").pack(pady=5)
-    tk.Label(note_window, text=f"DKP Gain: {dkp_gain}").pack(pady=5)
-    tk.Label(note_window, text=f"DKP Spent: {dkp_spent}").pack(pady=5)
 
+    # DKP Base Entry (Read-Only)
+    tk.Label(note_window, text="DKP Base:").pack(pady=2)
+    dkp_base_var = tk.StringVar(value=str(dkp_base))
+    dkp_base_entry = tk.Entry(note_window, textvariable=dkp_base_var, state="readonly")
+    dkp_base_entry.pack(pady=2)
+
+    # DKP Gain Entry
+    tk.Label(note_window, text="DKP Gain:").pack(pady=2)
+    dkp_gain_entry = tk.Entry(note_window)
+    dkp_gain_entry.insert(0, dkp_gain)
+    dkp_gain_entry.pack(pady=2)
+
+    # DKP Spent Entry
+    tk.Label(note_window, text="DKP Spent:").pack(pady=2)
+    dkp_spent_entry = tk.Entry(note_window)
+    dkp_spent_entry.insert(0, dkp_spent if dkp_spent else 0)
+    dkp_spent_entry.pack(pady=2)
+
+    # Function to update DKP Base when DKP Spent changes
+    def update_dkp_base():
+        try:
+            current_base = int(dkp_base)
+            dkp_spent = int(dkp_spent_entry.get())
+            new_base = current_base - dkp_spent
+            dkp_base_var.set(str(new_base))
+        except ValueError:
+            dkp_base_var.set("Error")
+
+    # Bind DKP Spent entry to trigger recalculation
+    dkp_spent_entry.bind("<KeyRelease>", lambda event: update_dkp_base())
+
+    # Note field
     tk.Label(note_window, text="Note:").pack(pady=5)
     note_text = tk.Text(note_window, height=10, width=40)
     note_text.insert(tk.END, note if note else "")
     note_text.pack(pady=5)
 
+    # Save changes to the database
     def save_note():
+        new_dkp_base = int(dkp_base_var.get()) if dkp_base_var.get().isdigit() else 0
+        new_dkp_gain = int(dkp_gain_entry.get()) if dkp_gain_entry.get().isdigit() else 0
+        new_dkp_spent = int(dkp_spent_entry.get()) if dkp_spent_entry.get().isdigit() else 0
         new_note = note_text.get("1.0", tk.END).strip()
-        cursor.execute("UPDATE dkp_table SET note = ? WHERE id = ?", (new_note, player_id))
+
+        cursor.execute("""
+            UPDATE dkp_table
+            SET dkp_base = ?, dkp_gain = ?, dkp_spent = ?, note = ?
+            WHERE id = ?
+        """, (new_dkp_base, new_dkp_gain, new_dkp_spent, new_note, player_id))
+
         connection.commit()
         note_window.destroy()
         refresh_display()
 
-    save_button = tk.Button(note_window, text="Save Note", command=save_note)
+    # Save button
+    save_button = tk.Button(note_window, text="Save Changes", command=save_note)
     save_button.pack(pady=10)
 
 def update_event_dropdown_window():
@@ -78,17 +110,14 @@ def open_add_players_window():
     add_players_window.title("Add Players from Text")
     add_players_window.geometry("550x600")
 
-    # Dropdown for selecting event
     tk.Label(add_players_window, text="Select Event:").pack(pady=5)
     global event_dropdown_window
     event_dropdown_window = ttk.Combobox(add_players_window, state="readonly")
     event_dropdown_window.pack(pady=5)
 
-    # Label to display the points of the selected event
     points_label = tk.Label(add_players_window, text="Event Points: N/A")
     points_label.pack(pady=5)
 
-    # Function to update the points label based on the selected event
     def show_event_points(event):
         selected_event = event_dropdown_window.get()
         if selected_event:
@@ -96,85 +125,75 @@ def open_add_players_window():
             result = cursor.fetchone()
             points_label.config(text=f"Event Points: {result[0]}" if result else "Event Points: N/A")
 
-    # Bind the dropdown selection to the points display function
     event_dropdown_window.bind("<<ComboboxSelected>>", show_event_points)
 
-    # Call to populate the dropdown
     update_event_dropdown_window()
 
-    # Button to open Point Manager and update dropdown after closing
     def open_and_refresh_point_manager():
         point_manager_window = open_point_manager()
 
-        # Ensure the window refreshes the dropdown when closed
         if point_manager_window:
             point_manager_window.protocol("WM_DELETE_WINDOW", lambda: (point_manager_window.destroy(), update_event_dropdown_window()))
 
     tk.Button(add_players_window, text="Manage Events/Points", command=open_and_refresh_point_manager).pack(pady=5)
 
-    # Paste Names from Discord
     tk.Label(add_players_window, text="Paste Names from Discord:").pack(pady=5)
     text_input_window = tk.Text(add_players_window, height=10, width=40)
     text_input_window.pack(pady=5)
 
-    # Add Players from Text
+
     def add_players_from_text():
-        # Get the selected event and points
+        # Ensure an event is selected
         selected_event = event_dropdown_window.get()
         if not selected_event:
             messagebox.showwarning("Input Error", "Please select an event.")
             return
 
-        # Retrieve event points from the database
+        # Fetch event points from the database
         cursor.execute("SELECT event_points FROM events WHERE event_name = ?", (selected_event,))
         event_points = cursor.fetchone()
-        if not event_points:
+        if event_points is None:
             messagebox.showwarning("Data Error", "No points found for the selected event.")
             return
 
-        event_points = event_points[0]  # Extract points value
+        event_points = event_points[0]  # Unpack the tuple
 
         # Get player names from the text input
         text = text_input_window.get("1.0", tk.END).strip()
-        # Updated regex to handle special characters, spaces, and parentheses
         names = set(re.findall(r"@?([\w\-\(\)\s]+)", text))
 
         if not names:
             messagebox.showwarning("Input Error", "No valid names found.")
             return
 
-        # Process each name and update DKP
+        # Loop through names and update the database
         for name in names:
-            clean_name = name.strip()  # Remove any extra whitespace
-
-            # Check if the player already exists in the database
-            cursor.execute("SELECT id, COALESCE(dkp_base, 0), COALESCE(dkp_gain, 0) FROM dkp_table WHERE name = ?", (clean_name,))
+            cursor.execute("SELECT id, COALESCE(dkp_base, 0), COALESCE(dkp_gain, 0) FROM dkp_table WHERE name = ?", (name,))
             player_data = cursor.fetchone()
 
             if player_data:
-                # Player exists, increment DKP values
+                # Update existing player
                 player_id, current_base, current_gain = player_data
                 new_base = current_base + event_points
-                new_gain = current_gain + event_points
 
                 cursor.execute(
-                    "UPDATE dkp_table SET dkp_base = ?, dkp_gain = ? WHERE id = ?",
-                    (new_base, new_gain, player_id)
+                    "UPDATE dkp_table SET dkp_base = ?, dkp_gain = dkp_gain + ? WHERE id = ?",
+                    (new_base, event_points, player_id)
                 )
             else:
-                # Player does not exist, insert a new record
+                # Insert new player
                 cursor.execute(
                     "INSERT INTO dkp_table (name, dkp_base, dkp_gain) VALUES (?, ?, ?)",
-                    (clean_name, event_points, event_points)
+                    (name, event_points, event_points)
                 )
 
-        # Commit changes to the database
+        # Commit changes and clear the text input
         connection.commit()
         text_input_window.delete("1.0", tk.END)
         refresh_display()
 
-        # Show a success message
-        messagebox.showinfo("Success", f"Added/Updated {len(names)} players with {event_points} DKP Base and Gain each.")
+        # Display a success message
+        messagebox.showinfo("Success", f"Added/Updated {len(names)} players with {event_points} DKP points each.")
 
 
     tk.Button(add_players_window, text="Add Players", command=add_players_from_text).pack(pady=10)
@@ -285,33 +304,6 @@ def delete_player():
     connection.commit()
     refresh_display()
 
-# Function to modify selected player's DKP
-def modify_player():
-    selected_item = tree.selection()
-    if not selected_item:
-        messagebox.showwarning("Selection Error", "Please select a player to modify.")
-        return
-
-    player_id = tree.item(selected_item[0])['values'][0]
-    dkp_base = dkp_base_entry.get()
-    dkp_gain = dkp_gain_entry.get()
-    dkp_spent = dkp_spent_entry.get()
-
-    try:
-        dkp_base = int(dkp_base) if dkp_base else 0
-        dkp_gain = int(dkp_gain) if dkp_gain else 0
-        dkp_spent = int(dkp_spent) if dkp_spent else 0
-    except ValueError:
-        messagebox.showwarning("Input Error", "Please enter valid numbers for DKP values.")
-        return
-
-    cursor.execute("""
-        UPDATE dkp_table
-        SET dkp_base = ?, dkp_gain = ?, dkp_spent = ?
-        WHERE id = ?
-    """, (dkp_base, dkp_gain, dkp_spent, player_id))
-    connection.commit()
-    refresh_display()
 
 # GUI setup
 root = tk.Tk()
@@ -322,30 +314,11 @@ root.geometry("1800x1000")
 frame_left = tk.Frame(root)
 frame_left.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
-modify_button = tk.Button(frame_left, text="Modify Player", command=modify_player)
-modify_button.pack(pady=5)
-
 delete_button = tk.Button(frame_left, text="Delete Player", command=delete_player)
 delete_button.pack(pady=5)
 
-dkp_base_label = tk.Label(frame_left, text="DKP Base:")
-dkp_base_label.pack()
-dkp_base_entry = tk.Entry(frame_left)
-dkp_base_entry.pack()
-
-dkp_gain_label = tk.Label(frame_left, text="DKP Gain:")
-dkp_gain_label.pack()
-dkp_gain_entry = tk.Entry(frame_left)
-dkp_gain_entry.pack()
-
-dkp_spent_label = tk.Label(frame_left, text="DKP Spent:")
-dkp_spent_label.pack()
-dkp_spent_entry = tk.Entry(frame_left)
-dkp_spent_entry.pack()
-
 add_players_window_button = tk.Button(frame_left, text="Add Players from Text", command=open_add_players_window)
 add_players_window_button.pack(pady=5)
-
 
 # Right-side display window
 frame_right = tk.Frame(root)
