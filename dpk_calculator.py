@@ -4,7 +4,9 @@ from tkinter import ttk, messagebox
 import ctypes
 import re
 from PIL import Image, ImageTk
-# Set DPI awareness for better resolution
+import pandas as pd
+from tkinter import filedialog
+
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except:
@@ -14,6 +16,36 @@ except:
 db_path = "db_dkp.db"
 connection = sqlite3.connect(db_path)
 cursor = connection.cursor()
+
+#save to excel
+def export_to_excel():
+    # Get the data from the database
+    cursor.execute("SELECT * FROM dkp_table")
+    rows = cursor.fetchall()
+
+    if not rows:
+        messagebox.showwarning("Export Error", "No data to export.")
+        return
+
+    # Define column headers
+    headers = [desc[0] for desc in cursor.description]
+
+    # Create a DataFrame
+    df = pd.DataFrame(rows, columns=headers)
+
+    # Open a Save As dialog to choose the file location
+    file_path = filedialog.asksaveasfilename(
+        defaultextension=".xlsx",
+        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+    )
+
+    if not file_path:
+        return  # User canceled the save dialog
+
+    # Export the DataFrame to Excel
+    df.to_excel(file_path, index=False)
+
+    messagebox.showinfo("Export Success", f"Data successfully saved to {file_path}.")
 
 # Function to refresh the display window
 def refresh_display():
@@ -308,10 +340,20 @@ def delete_player():
         messagebox.showwarning("Selection Error", "Please select a player to delete.")
         return
 
-    player_id = tree.item(selected_item[0])['values'][0]
+    # Get player ID and name
+    player_id, player_name = tree.item(selected_item[0])['values'][0], tree.item(selected_item[0])['values'][1]
+
+    # Show confirmation dialog
+    confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete {player_name}?")
+    if not confirm:
+        return  # Cancel the deletion if "No" is selected
+
+    # Proceed with deletion
     cursor.execute("DELETE FROM dkp_table WHERE id = ?", (player_id,))
     connection.commit()
     refresh_display()
+
+    messagebox.showinfo("Success", f"{player_name} has been successfully deleted.")
 
 
 # GUI setup
@@ -353,8 +395,10 @@ logo_image = Image.open("logo_grip.png")
 logo_image = logo_image.resize((100, 100))  # Resize the image
 logo_photo = ImageTk.PhotoImage(logo_image)
 logo_label = tk.Label(root, image=logo_photo)
-logo_label.place(relx=0.01, rely=0.85)
+logo_label.place(relx=0.03, rely=0.85)
 
+save_to_excel_button = tk.Button(root, text="Save to Excel", command=export_to_excel)
+save_to_excel_button.place(relx=0.03, rely=0.75)
 # Initial display refresh
 refresh_display()
 
