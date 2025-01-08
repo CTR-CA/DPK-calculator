@@ -47,24 +47,29 @@ def edit_note(event):
     dkp_base_entry = tk.Entry(note_window, textvariable=dkp_base_var, state="readonly")
     dkp_base_entry.pack(pady=2)
 
-    # DKP Gain Entry
-    tk.Label(note_window, text="DKP Gain:").pack(pady=2)
-    dkp_gain_entry = tk.Entry(note_window)
-    dkp_gain_entry.insert(0, dkp_gain)
-    dkp_gain_entry.pack(pady=2)
-
     # DKP Spent Entry
-    tk.Label(note_window, text="DKP Spent:").pack(pady=2)
+    tk.Label(note_window, text="DKP Spent (use + or -):").pack(pady=2)
     dkp_spent_entry = tk.Entry(note_window)
-    dkp_spent_entry.insert(0, dkp_spent if dkp_spent else 0)
+    dkp_spent_entry.insert(0, "0")
     dkp_spent_entry.pack(pady=2)
 
-    # Function to update DKP Base when DKP Spent changes
+    # Function to update DKP Base based on input
     def update_dkp_base():
         try:
             current_base = int(dkp_base)
-            dkp_spent = int(dkp_spent_entry.get())
-            new_base = current_base - dkp_spent
+            dkp_spent_input = dkp_spent_entry.get().strip()
+
+            # Handle + and - inputs
+            if dkp_spent_input.startswith("+"):
+                adjustment = int(dkp_spent_input[1:])
+                new_base = current_base + adjustment
+            elif dkp_spent_input.startswith("-"):
+                adjustment = int(dkp_spent_input[1:])
+                new_base = current_base - adjustment
+            else:
+                adjustment = int(dkp_spent_input)
+                new_base = current_base + adjustment
+
             dkp_base_var.set(str(new_base))
         except ValueError:
             dkp_base_var.set("Error")
@@ -80,20 +85,24 @@ def edit_note(event):
 
     # Save changes to the database
     def save_note():
-        new_dkp_base = int(dkp_base_var.get()) if dkp_base_var.get().isdigit() else 0
-        new_dkp_gain = int(dkp_gain_entry.get()) if dkp_gain_entry.get().isdigit() else 0
-        new_dkp_spent = int(dkp_spent_entry.get()) if dkp_spent_entry.get().isdigit() else 0
-        new_note = note_text.get("1.0", tk.END).strip()
+        try:
+            new_dkp_base = int(dkp_base_var.get())
+            dkp_spent_input = dkp_spent_entry.get().strip()
+            new_dkp_spent = int(dkp_spent_input) if dkp_spent_input else 0
+            new_note = note_text.get("1.0", tk.END).strip()
 
-        cursor.execute("""
-            UPDATE dkp_table
-            SET dkp_base = ?, dkp_gain = ?, dkp_spent = ?, note = ?
-            WHERE id = ?
-        """, (new_dkp_base, new_dkp_gain, new_dkp_spent, new_note, player_id))
+            cursor.execute("""
+                UPDATE dkp_table
+                SET dkp_base = ?, dkp_spent = ?, note = ?
+                WHERE id = ?
+            """, (new_dkp_base, new_dkp_spent, new_note, player_id))
 
-        connection.commit()
-        note_window.destroy()
-        refresh_display()
+            connection.commit()
+            messagebox.showinfo("Success", f"Updated {name}'s DKP Base to {new_dkp_base}.")
+            note_window.destroy()
+            refresh_display()
+        except ValueError:
+            messagebox.showwarning("Input Error", "Please enter valid numbers.")
 
     # Save button
     save_button = tk.Button(note_window, text="Save Changes", command=save_note)
