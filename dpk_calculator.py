@@ -93,29 +93,33 @@ def edit_note(event):
     dkp_spent_entry.insert(0, "0")
     dkp_spent_entry.pack(pady=2)
 
-    # Function to update DKP Base based on input
-    def update_dkp_base():
+    # Function to update DKP Spent
+    def update_dkp_spent():
         try:
-            current_base = int(dkp_base)
-            dkp_spent_input = dkp_spent_entry.get().strip()
-
-            # Handle + and - inputs
-            if dkp_spent_input.startswith("+"):
-                adjustment = int(dkp_spent_input[1:])
-                new_base = current_base + adjustment
-            elif dkp_spent_input.startswith("-"):
-                adjustment = int(dkp_spent_input[1:])
-                new_base = current_base - adjustment
+            if dkp_spent_entry.get().strip() == "0":
+                # If 0 is entered, keep the existing spent value
+                dkp_base_var.set(str(dkp_base))
             else:
-                adjustment = int(dkp_spent_input)
-                new_base = current_base + adjustment
+                current_base = int(dkp_base)
+                dkp_spent_input = dkp_spent_entry.get().strip()
 
-            dkp_base_var.set(str(new_base))
+                # Handle + and - inputs
+                if dkp_spent_input.startswith("+"):
+                    adjustment = int(dkp_spent_input[1:])
+                    new_base = current_base + adjustment
+                elif dkp_spent_input.startswith("-"):
+                    adjustment = int(dkp_spent_input[1:])
+                    new_base = current_base - adjustment
+                else:
+                    adjustment = int(dkp_spent_input)
+                    new_base = current_base + adjustment
+
+                dkp_base_var.set(str(new_base))
         except ValueError:
             dkp_base_var.set("Error")
 
     # Bind DKP Spent entry to trigger recalculation
-    dkp_spent_entry.bind("<KeyRelease>", lambda event: update_dkp_base())
+    dkp_spent_entry.bind("<KeyRelease>", lambda event: update_dkp_spent())
 
     # Note field
     tk.Label(note_window, text="Note:").pack(pady=5)
@@ -128,14 +132,28 @@ def edit_note(event):
         try:
             new_dkp_base = int(dkp_base_var.get())
             dkp_spent_input = dkp_spent_entry.get().strip()
-            new_dkp_spent = int(dkp_spent_input) if dkp_spent_input else 0
+
+            # Ensure dkp_spent is an integer or 0 if None
+            current_spent = int(dkp_spent) if dkp_spent not in (None, 'None') else 0
+
+            # Check if dkp_spent_input is a valid number
+            if dkp_spent_input.startswith(("+", "-")) and dkp_spent_input[1:].isdigit():
+                adjustment = int(dkp_spent_input)
+                new_spent = current_spent + adjustment
+            elif dkp_spent_input.isdigit():
+                new_spent = current_spent + int(dkp_spent_input)
+            elif not dkp_spent_input:  # If the input is empty, keep the current spent
+                new_spent = current_spent
+            else:
+                raise ValueError("Invalid input")
+
             new_note = note_text.get("1.0", tk.END).strip()
 
             cursor.execute("""
                 UPDATE dkp_table
                 SET dkp_base = ?, dkp_spent = ?, note = ?
                 WHERE id = ?
-            """, (new_dkp_base, new_dkp_spent, new_note, player_id))
+            """, (new_dkp_base, new_spent, new_note, player_id))
 
             connection.commit()
             messagebox.showinfo("Success", f"Updated {name}'s DKP Base to {new_dkp_base}.")
@@ -143,6 +161,7 @@ def edit_note(event):
             refresh_display()
         except ValueError:
             messagebox.showwarning("Input Error", "Please enter valid numbers.")
+
 
     # Save button
     save_button = tk.Button(note_window, text="Save Changes", command=save_note)
