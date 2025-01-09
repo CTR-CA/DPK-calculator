@@ -497,6 +497,7 @@ def delete_player():
 root = tk.Tk()
 root.title("DKP Calculator")
 root.geometry("1800x1000")
+root.resizable(False, False)
 
 # Left-side buttons
 frame_left = tk.Frame(root)
@@ -512,15 +513,22 @@ delete_button = tk.Button(frame_left, text="Delete Player", command=delete_playe
 delete_button.pack(pady=50)
 
 filter_frame = tk.Frame(root)
-filter_frame.pack(fill="x")
+filter_frame.pack(fill="x", padx=10, pady=5)
 
-# Entry widget for filtering by name
-filter_entry = tk.Entry(filter_frame)
-filter_entry.pack(fill="x", padx=10, pady=5)
+# Entry widget for filtering by name, aligned to the right
+filter_entry = tk.Entry(filter_frame, width=50)
+filter_entry.grid(row=0, column=1, sticky="e", padx=5, pady=5)
+
+# Optional label on the left for "Filter by Name"
+filter_label = tk.Label(filter_frame, text="Filter by Name:")
+filter_label.grid(row=0, column=0, sticky="w", padx=5)
 
 # Right-side display window
 frame_right = tk.Frame(root)
 frame_right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+scrollbar = tk.Scrollbar(frame_right)
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
 columns = ("ID", "Name", "DKP Base", "DKP Gain", "DKP Spent", "Manual Modifier", "Note", "Decay Value")
 tree = ttk.Treeview(frame_right, columns=columns, show="headings")
@@ -537,6 +545,7 @@ style.configure("Treeview.Heading", font=("Helvetica", 12, "bold"))
 tree.bind("<Double-1>", edit_note)
 
 tree.pack(fill=tk.BOTH, expand=True)
+scrollbar.config(command=tree.yview)
 
 def filter_treeview(event):
     search_term = filter_entry.get().strip().lower()
