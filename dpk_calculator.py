@@ -57,7 +57,15 @@ def refresh_display():
         tree.insert("", "end", values=row)
 
 # Function to open a window to edit a player's note
+note_window = None
+
 def edit_note(event):
+    global note_window
+
+    # If there's an existing note window, close it first
+    if note_window is not None:
+        note_window.destroy()
+
     selected_item = tree.selection()
     if not selected_item:
         messagebox.showwarning("Selection Error", "Please select a player to edit.")
@@ -70,7 +78,7 @@ def edit_note(event):
     note_window.title(f"Edit Player Data for {name}")
     note_window.geometry("550x600")
 
-    # Editable fields for DKP Base, Gain, and Spent
+    # Editable fields for DKP Base and Spent
     tk.Label(note_window, text=f"Name: {name}").pack(pady=5)
 
     # DKP Base Entry (Read-Only)
@@ -140,16 +148,39 @@ def edit_note(event):
     save_button = tk.Button(note_window, text="Save Changes", command=save_note)
     save_button.pack(pady=10)
 
+
+
 def update_event_dropdown_window():
     global event_dropdown_window
     cursor.execute("SELECT DISTINCT event_name FROM events WHERE event_name != ''")
     events = [row[0] for row in cursor.fetchall()]
     event_dropdown_window["values"] = events
 
+add_players_window = None
+point_manager_window = None
 def open_add_players_window():
+    global add_players_window, point_manager_window
+
+    # If the window already exists, bring it to the front
+    if add_players_window and add_players_window.winfo_exists():
+        add_players_window.lift()
+        return
+
+    # Create a new "Add Players" window
     add_players_window = tk.Toplevel(root)
     add_players_window.title("Add Players from Text")
     add_players_window.geometry("550x600")
+
+    # Function to handle window closing
+    def on_close():
+        global add_players_window, point_manager_window
+        if point_manager_window and point_manager_window.winfo_exists():
+            point_manager_window.destroy()  # Close Point Manager if it's open
+        add_players_window.destroy()
+        add_players_window = None
+
+    # Set the window close protocol
+    add_players_window.protocol("WM_DELETE_WINDOW", on_close)
 
     tk.Label(add_players_window, text="Select Event:").pack(pady=5)
     global event_dropdown_window
@@ -246,11 +277,96 @@ def open_and_refresh_point_manager():
         # Update dropdown when the window is closed
         point_manager_window.protocol("WM_DELETE_WINDOW", lambda: (update_event_dropdown_window(), point_manager_window.destroy()))
 
+
+decay_window = None
+
+def open_decay_window():
+    global decay_window
+
+    # Check if the window is already open
+    if decay_window and tk.Toplevel.winfo_exists(decay_window):
+        decay_window.lift()
+        return
+
+    decay_window = tk.Toplevel(root)
+    decay_window.title("Decay Managing")
+    decay_window.geometry("500x250")
+
+    # Label and Entry for Decay
+    tk.Label(decay_window, text="Enter Decay Percentage (+/-):").pack(pady=10)
+    decay_entry = tk.Entry(decay_window)
+    decay_entry.pack(pady=5)
+
+    # Apply Decay Button
+    def apply_decay():
+        try:
+            decay_input = decay_entry.get().strip()
+            if not decay_input:
+                messagebox.showwarning("Input Error", "Please enter a valid decay value.")
+                return
+
+            # Confirmation dialog
+            if not messagebox.askyesno("Confirm Decay", "Are you sure you want to apply decay for all players?"):
+                return
+
+            # Determine decay value
+            decay_value = float(decay_input)
+
+            # Apply decay to all players
+            cursor.execute("SELECT id, dkp_base FROM dkp_table")
+            players = cursor.fetchall()
+
+            for player_id, dkp_base in players:
+                if decay_input.startswith("+"):
+                    new_dkp_base = dkp_base + (dkp_base * (decay_value / 100))
+                elif decay_input.startswith("-"):
+                    new_dkp_base = dkp_base - (dkp_base * (abs(decay_value) / 100))
+                else:
+                    new_dkp_base = dkp_base - (dkp_base * (decay_value / 100))
+
+                cursor.execute("UPDATE dkp_table SET dkp_base = ? WHERE id = ?", (round(new_dkp_base), player_id))
+
+            connection.commit()
+            decay_window.destroy()
+            refresh_display()
+            messagebox.showinfo("Success", f"Applied a {decay_value}% decay to all players.")
+        except ValueError:
+            messagebox.showwarning("Input Error", "Please enter a valid number.")
+
+    # Button to apply decay
+    tk.Button(decay_window, text="Apply Decay", command=apply_decay).pack(pady=10)
+
+    # Handle window close to clear the variable
+    def on_close():
+        global decay_window
+        if decay_window:
+            decay_window.destroy()
+            decay_window = None
+
+    decay_window.protocol("WM_DELETE_WINDOW", on_close)
+
 # Function to open the Point Manager window
 def open_point_manager():
+    global point_manager_window
+
+    # If the window already exists, bring it to the front
+    if point_manager_window and point_manager_window.winfo_exists():
+        point_manager_window.lift()
+        return
+
+    # Create a new "Point Manager" window
     point_manager_window = tk.Toplevel(root)
     point_manager_window.title("Point Manager")
     point_manager_window.geometry("400x400")
+
+    # Function to handle window closing
+    def on_close():
+        global point_manager_window
+        point_manager_window.destroy()
+        point_manager_window = None
+
+    # Set the window close protocol
+    point_manager_window.protocol("WM_DELETE_WINDOW", on_close)
 
     # Event Name Entry
     tk.Label(point_manager_window, text="Event Name:").pack(pady=5)
@@ -290,6 +406,7 @@ def open_point_manager():
         messagebox.showinfo("Success", f"Event '{event_name}' with {event_points} points added.")
         event_name_entry.delete(0, tk.END)
         event_points_entry.delete(0, tk.END)
+        
 
     # Add Event Button
     add_event_button = tk.Button(point_manager_window, text="Add Event", command=add_event)
@@ -365,11 +482,14 @@ root.geometry("1800x1000")
 frame_left = tk.Frame(root)
 frame_left.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
 
-delete_button = tk.Button(frame_left, text="Delete Player", command=delete_player)
-delete_button.pack(pady=5)
-
 add_players_window_button = tk.Button(frame_left, text="Add Players from Text", command=open_add_players_window)
 add_players_window_button.pack(pady=5)
+
+decay_button = tk.Button(frame_left, text="Decay Managing", command=open_decay_window)
+decay_button.pack(pady=5)
+
+delete_button = tk.Button(frame_left, text="Delete Player", command=delete_player)
+delete_button.pack(pady=50)
 
 # Right-side display window
 frame_right = tk.Frame(root)
@@ -391,14 +511,18 @@ tree.bind("<Double-1>", edit_note)
 
 tree.pack(fill=tk.BOTH, expand=True)
 
-logo_image = Image.open("logo_grip.png")
-logo_image = logo_image.resize((100, 100))  # Resize the image
-logo_photo = ImageTk.PhotoImage(logo_image)
-logo_label = tk.Label(root, image=logo_photo)
-logo_label.place(relx=0.03, rely=0.85)
+# Load and resize the Gorilla Grip image
+gorilla_image = Image.open("gorilla_wall.webp")
+gorilla_image = gorilla_image.resize((200, 200))
+gorilla_photo = ImageTk.PhotoImage(gorilla_image)
+
+gorilla_label = tk.Label(root, image=gorilla_photo)
+gorilla_label.place(relx=0.005, rely=0.788)
+
+gorilla_label.image = gorilla_photo
 
 save_to_excel_button = tk.Button(root, text="Save to Excel", command=export_to_excel)
-save_to_excel_button.place(relx=0.03, rely=0.75)
+save_to_excel_button.place(relx=0.03, rely=0.70)
 # Initial display refresh
 refresh_display()
 
