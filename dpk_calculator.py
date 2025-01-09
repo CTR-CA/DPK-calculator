@@ -71,6 +71,7 @@ def edit_note(event):
         messagebox.showwarning("Selection Error", "Please select a player to edit.")
         return
 
+    # Unpack the correct number of values
     player_id, name, dkp_base, dkp_gain, dkp_spent, manual_modifire, note, decay_value = tree.item(selected_item[0])['values']
 
     # Create a new window for editing
@@ -510,6 +511,13 @@ decay_button.pack(pady=5)
 delete_button = tk.Button(frame_left, text="Delete Player", command=delete_player)
 delete_button.pack(pady=50)
 
+filter_frame = tk.Frame(root)
+filter_frame.pack(fill="x")
+
+# Entry widget for filtering by name
+filter_entry = tk.Entry(filter_frame)
+filter_entry.pack(fill="x", padx=10, pady=5)
+
 # Right-side display window
 frame_right = tk.Frame(root)
 frame_right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -529,6 +537,27 @@ style.configure("Treeview.Heading", font=("Helvetica", 12, "bold"))
 tree.bind("<Double-1>", edit_note)
 
 tree.pack(fill=tk.BOTH, expand=True)
+
+def filter_treeview(event):
+    search_term = filter_entry.get().strip().lower()
+    
+    # Clear the Treeview
+    for item in tree.get_children():
+        tree.delete(item)
+    
+    # Re-insert matching rows
+    cursor.execute("""
+        SELECT id, name, dkp_base, dkp_gain, dkp_spent, manual_modifire, note, decay_value
+        FROM dkp_table
+        WHERE LOWER(name) LIKE ?
+    """, ('%' + search_term + '%',))
+    
+    rows = cursor.fetchall()
+    for row in rows:
+        tree.insert('', 'end', values=row)
+
+# Bind the filter function to the Entry widget
+filter_entry.bind("<KeyRelease>", filter_treeview)
 
 # Load and resize the Gorilla Grip image
 gorilla_image = Image.open("gorilla_wall.webp")
