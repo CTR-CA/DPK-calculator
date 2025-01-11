@@ -10,6 +10,8 @@ from datetime import date
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+from datetime import datetime
+
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -289,6 +291,7 @@ def open_decay_window():
 
     if last_decay_date:
         from datetime import date, datetime
+        print(f"last_decay_date: {last_decay_date}")
         last_date = datetime.strptime(last_decay_date, "%Y-%m-%d").date()
         today_date = date.today()
         days_since_last_decay = (today_date - last_date).days
@@ -636,6 +639,7 @@ def update_decay_days_label():
         if last_decay_date:
             from datetime import date, datetime
 
+            last_decay_date = last_decay_date.strip()
             last_date = datetime.strptime(last_decay_date, "%Y-%m-%d").date()
             today_date = date.today()
 
