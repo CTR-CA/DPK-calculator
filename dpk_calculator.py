@@ -7,6 +7,9 @@ from PIL import Image, ImageTk
 import pandas as pd
 from tkinter import filedialog
 from datetime import date
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -503,6 +506,47 @@ def delete_player():
 
     messagebox.showinfo("Success", f"{player_name} has been successfully deleted.")
 
+import matplotlib.pyplot as plt
+
+def show_top_15_dkp_graph():
+    # Create a new graph window
+    graph_window = tk.Toplevel(root)
+    graph_window.title("DKP Base Points Graph")
+    graph_window.geometry("900x600")
+
+    # Query the database for players sorted by DKP Base Points
+    cursor.execute("SELECT name, dkp_base FROM dkp_table ORDER BY dkp_base DESC")
+    players = cursor.fetchall()
+
+    if not players:
+        messagebox.showinfo("No Data", "No players found in the database.")
+        graph_window.destroy()
+        return
+
+    # Prepare data for plotting
+    names = [player[0] for player in players]
+    dkp_base_values = [player[1] for player in players]
+
+    # Create the figure and axis for the plot
+    fig = Figure(figsize=(12, 8))
+    ax = fig.add_subplot(111)
+
+    # Plot the horizontal bar chart
+    ax.barh(names, dkp_base_values, color='skyblue')
+    ax.set_xlabel('DKP Base Points')
+    ax.set_title('All Players Sorted by DKP Base Points')
+
+    # Add values to each bar
+    for index, value in enumerate(dkp_base_values):
+        ax.text(value + 1, index, f'{value}', va='center')
+
+    # Invert y-axis to have the highest points on top
+    ax.invert_yaxis()
+
+    # Embed the figure inside the Tkinter window
+    canvas = FigureCanvasTkAgg(fig, master=graph_window)
+    canvas.draw()
+    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
 # GUI setup
 root = tk.Tk()
@@ -531,6 +575,9 @@ filter_entry.grid(row=0, column=1, sticky="e", padx=5, pady=5)
 
 filter_label = tk.Label(filter_frame, text="Filter by Name:")
 filter_label.grid(row=0, column=0, sticky="w", padx=5)
+
+graph_button = tk.Button(frame_left, text="DKP Graph", command=show_top_15_dkp_graph)
+graph_button.pack(pady=10)
 
 frame_right = tk.Frame(root)
 frame_right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
