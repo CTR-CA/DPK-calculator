@@ -50,8 +50,10 @@ def export_to_excel():
 def refresh_display():
     for row in tree.get_children():
         tree.delete(row)
-    cursor.execute("SELECT id, name, dkp_base, dkp_gain, dkp_spent, manual_modifire, note, decay_value FROM dkp_table")
+
+    cursor.execute("SELECT name, dkp_base, dkp_gain, dkp_spent, note FROM dkp_table")
     rows = cursor.fetchall()
+
     for row in rows:
         tree.insert("", "end", values=row)
 
@@ -60,36 +62,46 @@ note_window = None
 def edit_note(event):
     global note_window
 
+    # Destroy the existing note window if it exists
     if note_window is not None:
         note_window.destroy()
 
+    # Get the selected item from the treeview
     selected_item = tree.selection()
     if not selected_item:
         messagebox.showwarning("Selection Error", "Please select a player to edit.")
         return
 
-    player_id, name, dkp_base, dkp_gain, dkp_spent, manual_modifire, note, decay_value = tree.item(selected_item[0])['values']
+    # Get the values from the selected row
+    values = tree.item(selected_item[0])['values']
 
+    # Unpack the values from the Treeview (adjust based on your columns)
+    name, dkp_base, dkp_gain, dkp_spent, note = values
+
+    # Create a new note window
     note_window = tk.Toplevel(root)
     note_window.title(f"Edit Player Data for {name}")
     note_window.geometry("550x600")
 
+    # Display the player's name
     tk.Label(note_window, text=f"Name: {name}").pack(pady=5)
 
+    # DKP Base entry (read-only)
     tk.Label(note_window, text="DKP Base:").pack(pady=2)
     dkp_base_var = tk.StringVar(value=str(dkp_base))
     dkp_base_entry = tk.Entry(note_window, textvariable=dkp_base_var, state="readonly")
     dkp_base_entry.pack(pady=2)
 
+    # DKP Spent entry
     tk.Label(note_window, text="DKP Spent (use + or -):").pack(pady=2)
     dkp_spent_entry = tk.Entry(note_window)
     dkp_spent_entry.insert(0, "0")
     dkp_spent_entry.pack(pady=2)
 
+    # Function to update DKP base based on DKP spent
     def update_dkp_spent():
         try:
             if dkp_spent_entry.get().strip() == "0":
-
                 dkp_base_var.set(str(dkp_base))
             else:
                 current_base = int(dkp_base)
@@ -109,13 +121,16 @@ def edit_note(event):
         except ValueError:
             dkp_base_var.set("Error")
 
+    # Bind the DKP spent entry to update DKP base in real-time
     dkp_spent_entry.bind("<KeyRelease>", lambda event: update_dkp_spent())
 
+    # Note text box
     tk.Label(note_window, text="Note:").pack(pady=5)
     note_text = tk.Text(note_window, height=10, width=40)
     note_text.insert(tk.END, note if note else "")
     note_text.pack(pady=5)
 
+    # Save button function
     def save_note():
         try:
             new_dkp_base = int(dkp_base_var.get())
@@ -135,19 +150,25 @@ def edit_note(event):
 
             new_note = note_text.get("1.0", tk.END).strip()
 
+            # Update the database
             cursor.execute("""
                 UPDATE dkp_table
                 SET dkp_base = ?, dkp_spent = ?, note = ?
-                WHERE id = ?
-            """, (new_dkp_base, new_spent, new_note, player_id))
+                WHERE name = ?
+            """, (new_dkp_base, new_spent, new_note, name))
 
             connection.commit()
+
+            # Update the Treeview display immediately
+            tree.item(selected_item[0], values=(name, new_dkp_base, dkp_gain, new_spent, new_note))
+
             messagebox.showinfo("Success", f"Updated {name}'s DKP Base to {new_dkp_base}.")
             note_window.destroy()
-            refresh_display()
+
         except ValueError:
             messagebox.showwarning("Input Error", "Please enter valid numbers.")
 
+    # Save button
     save_button = tk.Button(note_window, text="Save Changes", command=save_note)
     save_button.pack(pady=10)
 
@@ -309,19 +330,24 @@ def open_decay_window():
 
     def apply_decay():
         try:
+            # Get the decay input from the entry
             decay_input = decay_entry.get().strip()
             if not decay_input:
                 messagebox.showwarning("Input Error", "Please enter a valid decay value.")
                 return
 
+            # Ask for confirmation
             if not messagebox.askyesno("Confirm Decay", "Are you sure you want to apply decay for all players?"):
                 return
 
+            # Convert the input to a float
             decay_value = float(decay_input)
 
+            # Fetch all players from the database
             cursor.execute("SELECT id, dkp_base FROM dkp_table")
             players = cursor.fetchall()
 
+            # Apply the decay to each player
             for player_id, dkp_base in players:
                 if decay_input.startswith("+"):
                     new_dkp_base = dkp_base + (dkp_base * (decay_value / 100))
@@ -332,10 +358,10 @@ def open_decay_window():
 
                 cursor.execute("UPDATE dkp_table SET dkp_base = ? WHERE id = ?", (round(new_dkp_base), player_id))
 
-            today_date = date.today().isoformat()
-            cursor.execute("UPDATE decay SET last_decay_date = ? WHERE id = 1", (today_date,))
-
+            # Commit the changes without updating the last_decay_date
             connection.commit()
+
+            # Refresh the display
             decay_window.destroy()
             refresh_display()
             messagebox.showinfo("Success", f"Applied a {decay_value}% decay to all players.")
@@ -497,59 +523,49 @@ def delete_player():
         messagebox.showwarning("Selection Error", "Please select a player to delete.")
         return
 
-    player_id, player_name = tree.item(selected_item[0])['values'][0], tree.item(selected_item[0])['values'][1]
+    player_name = tree.item(selected_item[0])['values'][0]
 
     confirm = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete {player_name}?")
     if not confirm:
         return
 
-    cursor.execute("DELETE FROM dkp_table WHERE id = ?", (player_id,))
+    cursor.execute("DELETE FROM dkp_table WHERE name = ?", (player_name,))
     connection.commit()
+
     refresh_display()
 
     messagebox.showinfo("Success", f"{player_name} has been successfully deleted.")
 
+
 import matplotlib.pyplot as plt
 
 def show_top_15_dkp_graph():
-    # Create a new graph window
-    graph_window = tk.Toplevel(root)
-    graph_window.title("DKP Base Points Graph")
-    graph_window.geometry("900x600")
-
-    # Query the database for players sorted by DKP Base Points
-    cursor.execute("SELECT name, dkp_base FROM dkp_table ORDER BY dkp_base DESC")
+    cursor.execute("SELECT name, dkp_base FROM dkp_table ORDER BY dkp_base DESC LIMIT 15")
     players = cursor.fetchall()
 
     if not players:
         messagebox.showinfo("No Data", "No players found in the database.")
-        graph_window.destroy()
         return
 
-    # Prepare data for plotting
     names = [player[0] for player in players]
     dkp_base_values = [player[1] for player in players]
 
-    # Create the figure and axis for the plot
-    fig = Figure(figsize=(12, 8))
-    ax = fig.add_subplot(111)
+    # Create the graph
+    fig, ax = plt.subplots(figsize=(12, 8))
+    bars = ax.barh(names, dkp_base_values, color='skyblue')
 
-    # Plot the horizontal bar chart
-    ax.barh(names, dkp_base_values, color='skyblue')
-    ax.set_xlabel('DKP Base Points')
-    ax.set_title('All Players Sorted by DKP Base Points')
+    # Add values on the bars
+    for bar, value in zip(bars, dkp_base_values):
+        ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height() / 2, f'{value}', va='center')
 
-    # Add values to each bar
-    for index, value in enumerate(dkp_base_values):
-        ax.text(value + 1, index, f'{value}', va='center')
-
-    # Invert y-axis to have the highest points on top
+    # Improve the graph layout
+    ax.set_title("Top 15 Players by DKP Base Points")
+    ax.set_xlabel("DKP Base Points")
     ax.invert_yaxis()
+    plt.tight_layout()
 
-    # Embed the figure inside the Tkinter window
-    canvas = FigureCanvasTkAgg(fig, master=graph_window)
-    canvas.draw()
-    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+    # Show the graph
+    plt.show()
 
 # GUI setup
 root = tk.Tk()
@@ -588,7 +604,7 @@ frame_right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 scrollbar = tk.Scrollbar(frame_right)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-columns = ("ID", "Name", "DKP Base", "DKP Gain", "DKP Spent", "Manual Modifier", "Note", "Decay Value")
+columns = ("Name", "DKP Base", "DKP Gain", "DKP Spent", "Note")
 tree = ttk.Treeview(frame_right, columns=columns, show="headings")
 for col in columns:
     tree.heading(col, text=col)
@@ -656,7 +672,6 @@ def update_decay_days_label():
         days_left = "Not Set"
 
     decay_days_label.config(text=f"Next Decay in: {days_left} days")
-
 
 def apply_decay_auto():
     cursor.execute("SELECT decay_percent_month FROM decay LIMIT 1")
